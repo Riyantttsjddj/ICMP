@@ -1,27 +1,36 @@
 #!/bin/bash
 
-# Konfigurasi
-PT_VERSION="0.0.5"
-PT_BINARY_URL="https://github.com/esrrhs/pingtunnel/releases/download/${PT_VERSION}/pingtunnel_${PT_VERSION}_linux_amd64.zip"
-PT_DIR="/opt/pingtunnel"
-PT_KEY="rahasiatunnel123"  # Ganti sesuai keinginan
+set -e
 
-echo "[+] Memasang dependensi..."
+# Konfigurasi
+PT_DIR="/opt/pingtunnel"
+PT_VERSION="0.0.5"
+PT_KEY="riyan200324"  # Ganti sesuai keinginan
+PT_BINARY_URL="https://github.com/esrrhs/pingtunnel/releases/download/${PT_VERSION}/pingtunnel_${PT_VERSION}_linux_amd64.zip"
+
+echo "[*] Update dan install dependencies..."
 apt update && apt install -y unzip curl wget
 
-echo "[+] Membuat direktori: $PT_DIR"
-mkdir -p $PT_DIR && cd $PT_DIR
+echo "[*] Hapus instalasi lama jika ada..."
+systemctl stop pingtunnel 2>/dev/null || true
+systemctl disable pingtunnel 2>/dev/null || true
+rm -rf $PT_DIR
+rm -f /etc/systemd/system/pingtunnel.service
 
-echo "[+] Mengunduh pingtunnel..."
-curl -L -o pt.zip "$PT_BINARY_URL"
+echo "[*] Buat direktori baru: $PT_DIR"
+mkdir -p $PT_DIR
+cd $PT_DIR
 
-echo "[+] Mengekstrak..."
-unzip -o pt.zip
+echo "[*] Download pingtunnel versi $PT_VERSION"
+wget -q --show-progress "$PT_BINARY_URL" -O pingtunnel.zip
+
+echo "[*] Ekstrak pingtunnel..."
+unzip -o pingtunnel.zip
 chmod +x pingtunnel
-rm pt.zip
+rm pingtunnel.zip
 
-echo "[+] Membuat layanan systemd..."
-cat > /etc/systemd/system/pingtunnel.service <<EOF
+echo "[*] Buat service systemd untuk pingtunnel..."
+cat <<EOF >/etc/systemd/system/pingtunnel.service
 [Unit]
 Description=ICMP Tunnel Server - pingtunnel
 After=network.target
@@ -29,7 +38,7 @@ After=network.target
 [Service]
 ExecStart=$PT_DIR/pingtunnel -type server -key $PT_KEY
 Restart=always
-RestartSec=3
+RestartSec=5
 User=root
 WorkingDirectory=$PT_DIR
 
@@ -37,24 +46,21 @@ WorkingDirectory=$PT_DIR
 WantedBy=multi-user.target
 EOF
 
-echo "[+] Mengaktifkan layanan..."
-systemctl daemon-reexec
+echo "[*] Reload systemd dan aktifkan service pingtunnel..."
 systemctl daemon-reload
 systemctl enable pingtunnel
 systemctl start pingtunnel
 
-# Deteksi IP publik VPS
-echo "[+] Mendeteksi IP publik VPS..."
+echo "[*] Mendeteksi IP publik VPS..."
 PUBLIC_IP=$(curl -s ifconfig.me || wget -qO- ifconfig.me)
 
 echo ""
-echo "✅ Sukses! ICMP Tunnel Server telah berjalan."
-echo "🔑 Kunci Tunnel: $PT_KEY"
+echo "✅ Setup selesai! pingtunnel server berjalan."
 echo "🌐 IP Publik VPS: $PUBLIC_IP"
+echo "🔑 Tunnel key: $PT_KEY"
 echo ""
-echo "📌 Gunakan IP dan kunci ini di sisi client Android:"
-echo "Contoh:"
+echo "📌 Jalankan client dengan contoh:"
 echo "./pingtunnel -type client -s $PUBLIC_IP -l 1080 -key $PT_KEY -sockss5 1080"
 echo ""
-echo "📡 Lihat status layanan dengan:"
-echo "sudo systemctl status pingtunnel -n 20"
+echo "Cek status service dengan:"
+echo "systemctl status pingtunnel"
