@@ -1,57 +1,57 @@
 #!/bin/bash
 set -euo pipefail
 
-# > Konfigurasi
-PT_DIR="/opt/pingtunnel"
-PT_KEY="rahasia-freenet123"
-GIT_URL="https://github.com/esrrhs/pingtunnel.git"
+# Konfigurasi
+REPO_URL="https://github.com/Riyantttsjddj/pingtunnel-2.8.git"
+INSTALL_DIR="/opt/pingtunnel"
+PT_BIN="/usr/local/bin/pingtunnel"
+PT_KEY="rahasia-freenet"
 
-# 1. Install dependency + Go
-apt update
-apt install -y git golang unzip wget curl
+echo "[*] Update & install dependensi..."
+apt update && apt install -y git unzip curl wget
 
-# 2. Cleanup old install
+echo "[*] Hapus instalasi lama jika ada..."
 systemctl stop pingtunnel 2>/dev/null || true
 systemctl disable pingtunnel 2>/dev/null || true
-rm -rf "$PT_DIR"
-rm -f /etc/systemd/system/pingtunnel.service
+rm -rf "$INSTALL_DIR"
+rm -f "$PT_BIN" /etc/systemd/system/pingtunnel.service
 
-# 3. Clone repo terbaru & build
-mkdir -p "$PT_DIR"
-git clone "$GIT_URL" "$PT_DIR"
-cd "$PT_DIR"
-go build -o pingtunnel .  # build binary
+echo "[*] Clone repo..."
+git clone "$REPO_URL" "$INSTALL_DIR"
 
-# 4. Setup systemd service
-cat <<EOF >/etc/systemd/system/pingtunnel.service
+echo "[*] Ekstrak binary pingtunnel..."
+cd "$INSTALL_DIR"
+unzip -o pingtunnel_linux_amd64.zip
+
+echo "[*] Pindahkan binary ke /usr/local/bin..."
+mv -f pingtunnel_linux_amd64 "$PT_BIN"
+chmod +x "$PT_BIN"
+
+echo "[*] Buat service systemd..."
+cat <<EOF > /etc/systemd/system/pingtunnel.service
 [Unit]
-Description=ICMP Tunnel Server - pingtunnel (built from source)
+Description=ICMP Tunnel Server - pingtunnel
 After=network.target
 
 [Service]
-ExecStart=$PT_DIR/pingtunnel -type server -key $PT_KEY
+ExecStart=$PT_BIN -type server -key $PT_KEY
 Restart=always
 RestartSec=5
 User=root
-WorkingDirectory=$PT_DIR
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
-# 5. Enable service
+echo "[*] Reload systemd dan mulai service..."
 systemctl daemon-reload
 systemctl enable pingtunnel
 systemctl restart pingtunnel
 
-# 6. Tampilkan IP publik & instruksi client
-PUBLIC_IP=$(curl -s ifconfig.me || echo "IP TIDAK TERDETEKSI")
+IP_PUBLIC=$(curl -s ifconfig.me || curl -s ipinfo.io/ip)
 echo ""
-echo "✅ PingTunnel (source) berhasil berjalan!"
-echo "🌐 IP VPS     : $PUBLIC_IP"
-echo "🔑 Key Tunnel : $PT_KEY"
+echo "✅ Pingtunnel berhasil disetup!"
+echo "🌐 IP VPS      : $IP_PUBLIC"
+echo "🔑 Kunci Tunnel: $PT_KEY"
 echo ""
-echo "📌 Jalankan client seperti ini:"
-echo "./pingtunnel -type client -s $PUBLIC_IP -l 1080 -key $PT_KEY -sock5 1"
-echo ""
-echo "📋 Cek status dengan: systemctl status pingtunnel"
+echo "📋 Cek status  : systemctl status pingtunnel"
