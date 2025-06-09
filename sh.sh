@@ -1,50 +1,51 @@
 #!/bin/bash
 
-set -euo pipefail
-
-# === Konfigurasi ===
-PT_DIR="/opt/pingtunnel"
-PT_VERSION="0.0.5"
+# === Konfigurasi Dasar ===
+PT_VERSION="2.8"
 PT_KEY="rahasia-freenet123"
-PT_BINARY_URL="https://github.com/esrrhs/pingtunnel/releases/download/0.0.5/pingtunnel_linux_amd64"
-PT_BINARY_NAME="pingtunnel"
+PT_DIR="/opt/pingtunnel"
+PT_BINARY="pingtunnel"
+PT_ZIP="pingtunnel_linux64.zip"
+PT_URL="https://github.com/esrrhs/pingtunnel/releases/download/${PT_VERSION}/${PT_ZIP}"
 
-# === Install dependensi ===
-echo "[*] Update & install unzip curl wget..."
-apt update && apt install -y curl wget unzip || {
-  echo "Gagal install dependencies."
-  exit 1
+# === Update dan Install dependensi ===
+echo "[*] Update sistem dan install unzip, wget, curl..."
+apt update && apt install -y unzip wget curl || {
+    echo "[!] Gagal install dependensi."; exit 1;
 }
 
-# === Bersihkan instalasi lama ===
+# === Bersihkan Instalasi Lama ===
 echo "[*] Membersihkan instalasi pingtunnel sebelumnya..."
 systemctl stop pingtunnel 2>/dev/null || true
 systemctl disable pingtunnel 2>/dev/null || true
 rm -rf "$PT_DIR"
 rm -f /etc/systemd/system/pingtunnel.service
 
-# === Setup folder baru ===
-echo "[*] Membuat direktori baru di: $PT_DIR"
+# === Buat Folder Instalasi ===
+echo "[*] Membuat direktori instalasi: $PT_DIR"
 mkdir -p "$PT_DIR"
 cd "$PT_DIR"
 
-# === Download dan izinkan eksekusi ===
-echo "[*] Download binary pingtunnel dari GitHub..."
-wget -O "$PT_BINARY_NAME" "$PT_BINARY_URL" || {
-  echo "Gagal download binary pingtunnel."
-  exit 1
+# === Download & Ekstrak Binary ===
+echo "[*] Mengunduh pingtunnel dari GitHub..."
+wget -q --show-progress "$PT_URL" -O "$PT_ZIP" || {
+    echo "[!] Gagal mengunduh pingtunnel."; exit 1;
 }
-chmod +x "$PT_BINARY_NAME"
 
-# === Setup systemd service ===
-echo "[*] Membuat systemd service..."
-cat <<EOF >/etc/systemd/system/pingtunnel.service
+echo "[*] Mengekstrak file..."
+unzip -o "$PT_ZIP"
+chmod +x "$PT_BINARY"
+rm -f "$PT_ZIP"
+
+# === Setup Systemd Service ===
+echo "[*] Membuat service pingtunnel..."
+cat <<EOF > /etc/systemd/system/pingtunnel.service
 [Unit]
 Description=ICMP Tunnel Server - pingtunnel
 After=network.target
 
 [Service]
-ExecStart=$PT_DIR/$PT_BINARY_NAME -type server -key $PT_KEY
+ExecStart=$PT_DIR/$PT_BINARY -type server -key $PT_KEY
 Restart=always
 RestartSec=5
 User=root
@@ -54,26 +55,22 @@ WorkingDirectory=$PT_DIR
 WantedBy=multi-user.target
 EOF
 
-# === Jalankan service ===
+# === Reload Systemd dan Mulai Service ===
 echo "[*] Mengaktifkan service pingtunnel..."
 systemctl daemon-reload
 systemctl enable pingtunnel
 systemctl restart pingtunnel || {
-  echo "❌ Gagal menjalankan pingtunnel, cek dengan: journalctl -u pingtunnel"
-  exit 1
+    echo "[!] Gagal menjalankan pingtunnel. Cek: journalctl -u pingtunnel"; exit 1;
 }
 
-# === Tampilkan IP publik VPS ===
-echo "[*] Mendeteksi IP publik..."
-PUBLIC_IP=$(curl -s ifconfig.me || wget -qO- ifconfig.me || echo "Tidak terdeteksi")
-
-# === Ringkasan ===
+# === Deteksi IP Publik ===
+PUBLIC_IP=$(curl -s ifconfig.me || wget -qO- ifconfig.me)
 echo ""
-echo "✅ Setup pingtunnel selesai!"
-echo "🌐 IP VPS: $PUBLIC_IP"
-echo "🔑 Key: $PT_KEY"
+echo "✅ pingtunnel berhasil dijalankan!"
+echo "🌐 IP VPS     : $PUBLIC_IP"
+echo "🔑 Key Tunnel : $PT_KEY"
 echo ""
-echo "📌 Contoh jalankan client:"
-echo "./pingtunnel -type client -s $PUBLIC_IP -l 1080 -key $PT_KEY -sockss5 1080"
+echo "📌 Contoh client command:"
+echo "./pingtunnel -type client -s $PUBLIC_IP -l 1080 -key $PT_KEY -sock5 1"
 echo ""
-echo "🔍 Cek status: systemctl status pingtunnel"
+echo "📋 Cek status service: systemctl status pingtunnel"
